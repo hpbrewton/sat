@@ -30,7 +30,8 @@ takeNumber(char *buffer, int *pos, int length) {
 int
 main(int argc, char *argv[]) {
     // mmap in the file
-    char *filename = "/Users/harrison/dextrose/fermat-907547022132073.cnf";
+    //char *filename = "/Users/harrison/dextrose/fermat-907547022132073.cnf";
+    char *filename = "pigeon2.cnf";
     int cnf_file = open(filename, O_RDONLY);
     if (cnf_file < 0) {
         printf("Could not open the CNF file\n");
@@ -79,30 +80,33 @@ main(int argc, char *argv[]) {
         }
     }
 
-    int stackPos = 0;
+    int stackPos = 1;
     memset(variableStack,0,sizeof(int)*(1+nvariables));
     memset(roundHandled,0,sizeof(int)*(1+nvariables));
     
     for (;;) {
-        if (stackPos >= nvariables) {
+        if (stackPos > nvariables) {
             printf("sat");
             break;
         }
 
         // if neutral, find next free variable
         if (variableStack[stackPos] == 0) {
-            int v = 0;
-            for (; v < nvariables && variableStack[stackPos]; ++v);
+            int v = 1;
+            for (; v < nvariables && roundHandled[v]; ++v);
             variableStack[stackPos] = v;
             roundHandled[v] = stackPos;
         }
-        
+
         // propigate
         int contradiction = 0;
         int moreToFind;
         do {
             moreToFind = 0;
 
+            for (int i = 0; i < nvariables; ++i) printf("%d,", roundHandled[i]);
+            printf("\n");
+            
             // propigate step
             for (int clause = 0; clause < nclauses; ++clause) {
                 int lastLiteral = 0;
@@ -113,18 +117,21 @@ main(int argc, char *argv[]) {
                     int assigned = roundHandled[abs(literal)];
 
                     if (!assigned) {
-                        // this clause is not assigned
+                        // this literal is not assigned
                         lastLiteral = literal;
                         freeCount++;
                         continue;
                     }
                     
+                    printf("\t\ta: %d, l: %d\n", assigned, literal);
                     if ((assigned < 0) == (literal < 0)) {
                         // this clause is satisfied
                         satisfied = 1;
                         break;
                     } 
                 }
+
+                printf("\tc: %d, s: %d, fc: %d\n", clause, satisfied, freeCount);
 
                 if (satisfied) {
                     continue;
@@ -137,23 +144,26 @@ main(int argc, char *argv[]) {
                 }
 
                 if (freeCount == 1) {
-                    roundHandled[abs(lastLiteral)] = (lastLiteral < 0) ? -stackPos : stackPos;
+                    roundHandled[abs(lastLiteral)] = stackPos*(1-2*(lastLiteral < 0));
+                    printf("learned %d %d\n",lastLiteral, roundHandled[abs(lastLiteral)]);
                     moreToFind = 1;
                 }
             }
         } while (moreToFind);
 
+        printf("X: %d\n", contradiction);
         if (contradiction) {
             // forget everything learned in round
-            for (int i = 0; i < nvariables; ++i) 
+            for (int i = 1; i <= nvariables; ++i) 
                 if (abs(roundHandled[i]) >= stackPos)
                     roundHandled[i] = 0;
             // clear to last positive on the stack
             for (; stackPos >= 0 && variableStack[stackPos] < 0; stackPos--) variableStack[stackPos] = 0;
-            if (stackPos < 0) {
-                printf("unsat");
-                return -1;
+            if (stackPos < 1) {
+                printf("unsat\n");
+                return 0;
             }
+            roundHandled[variableStack[stackPos]] = -stackPos;
             variableStack[stackPos] *= -1;
         } else {
             stackPos++;
