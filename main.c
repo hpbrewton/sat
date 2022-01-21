@@ -31,7 +31,7 @@ int
 main(int argc, char *argv[]) {
     // mmap in the file
     //char *filename = "/Users/harrison/dextrose/fermat-907547022132073.cnf";
-    char *filename = "pigeon2.cnf";
+    char *filename = "ex2.cnf";
     int cnf_file = open(filename, O_RDONLY);
     if (cnf_file < 0) {
         printf("Could not open the CNF file\n");
