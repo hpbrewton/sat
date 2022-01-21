@@ -79,76 +79,84 @@ main(int argc, char *argv[]) {
         }
     }
 
+    int stackPos = 0;
     memset(variableStack,0,sizeof(int)*(1+nvariables));
     memset(roundHandled,0,sizeof(int)*(1+nvariables));
     
-    // stacker
-    int variableStackPos = 0;
-    int negativeCount = 0;
-    variableStack[1+nvariables] = 1;
-    for(;;) {
-        if (variableStackPos == nvariables) {
-            variableStackPos--;
-            continue;
-        }
-        if (negativeCount == nvariables) {
+    for (;;) {
+        if (stackPos >= nvariables) {
+            printf("sat");
             break;
         }
-        if (variableStack[variableStackPos] == 0) {
-            variableStack[variableStackPos] = 1; variableStackPos++;
-        } else if (variableStack[variableStackPos] > 0) {
-            variableStack[variableStackPos] = -1; variableStackPos++; negativeCount++;
-        } else if (variableStack[variableStackPos] < 0) {
-            variableStack[variableStackPos] = 0; variableStackPos--; negativeCount--;
+
+        // if neutral, find next free variable
+        if (variableStack[stackPos] == 0) {
+            int v = 0;
+            for (; v < nvariables && variableStack[stackPos]; ++v);
+            variableStack[stackPos] = v;
+            roundHandled[v] = stackPos;
         }
-
-        for (int i = 0; i < nvariables; ++i) printf("%d,", variableStack[i]);
-        printf("\n");
-    }
-    return 0;
-
-    // choose variable
-    int moreToFind;
-    do {
-        moreToFind = 0;
-
+        
         // propigate
-        for (int clause = 0; clause < nclauses; ++clause) {
-            int lastLiteral = 0;
-            int freeCount = 0;
-            int satisfied = 0;
-            for (int literaln = literalCountOffset[clause]; literaln < literalCountOffset[clause+1]; ++literaln) {
-                int literal = literalOffset[literaln];
-                int assigned = roundHandled[abs(literal)];
+        int contradiction = 0;
+        int moreToFind;
+        do {
+            moreToFind = 0;
 
-                if (!assigned) {
-                    // this clause is not assigned
-                    lastLiteral = literal;
-                    freeCount++;
+            // propigate step
+            for (int clause = 0; clause < nclauses; ++clause) {
+                int lastLiteral = 0;
+                int freeCount = 0;
+                int satisfied = 0;
+                for (int literaln = literalCountOffset[clause]; literaln < literalCountOffset[clause+1]; ++literaln) {
+                    int literal = literalOffset[literaln];
+                    int assigned = roundHandled[abs(literal)];
+
+                    if (!assigned) {
+                        // this clause is not assigned
+                        lastLiteral = literal;
+                        freeCount++;
+                        continue;
+                    }
+                    
+                    if ((assigned < 0) == (literal < 0)) {
+                        // this clause is satisfied
+                        satisfied = 1;
+                        break;
+                    } 
+                }
+
+                if (satisfied) {
                     continue;
                 }
-                
-                if ((assigned < 0) == (literal < 0)) {
-                    // this clause is satisfied
-                    satisfied = 1;
+
+                if (freeCount <= 0) {
+                    contradiction = 1;
+                    moreToFind = 0;
                     break;
-                } 
-            }
+                }
 
-            if (satisfied) {
-                continue;
+                if (freeCount == 1) {
+                    roundHandled[abs(lastLiteral)] = (lastLiteral < 0) ? -stackPos : stackPos;
+                    moreToFind = 1;
+                }
             }
+        } while (moreToFind);
 
-            if (freeCount <= 0) {
-                printf("contradiction... there's a bug in the solver");
+        if (contradiction) {
+            // forget everything learned in round
+            for (int i = 0; i < nvariables; ++i) 
+                if (abs(roundHandled[i]) >= stackPos)
+                    roundHandled[i] = 0;
+            // clear to last positive on the stack
+            for (; stackPos >= 0 && variableStack[stackPos] < 0; stackPos--) variableStack[stackPos] = 0;
+            if (stackPos < 0) {
+                printf("unsat");
                 return -1;
             }
-
-            if (freeCount == 1 && !roundHandled[abs(lastLiteral)]) {
-                printf("learned: %d\n", lastLiteral);
-                roundHandled[abs(lastLiteral)] = (lastLiteral < 0) ? -1 : 1;
-                moreToFind = 1;
-            }
+            variableStack[stackPos] *= -1;
+        } else {
+            stackPos++;
         }
-    } while (moreToFind);
+    }
 }   
