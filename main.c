@@ -106,14 +106,22 @@ main(int argc, char *argv[]) {
             roundHandled[v] = stackPos;
         }
 
+        /*
+        */
+        // estimating percent done
+        float percent_done = 0;
+        for (int i = 1; i <= stackPos; ++i) {
+            float delta = 1;
+            for (int j = 0; j > ((variableStack[i] < 0) ? variableStack[i] : 0); --j) delta /= 2.0;
+            if (variableStack[i] < 0) percent_done += delta;
+        }
+        printf("%.3f%%\n", percent_done*100.0);
+
         // propigate
         int contradiction = 0;
         int moreToFind;
         do {
             moreToFind = 0;
-
-            //for (int i = 0; i < nvariables; ++i) printf("%d,", roundHandled[i]);
-            // printf("\n");
             
             // propigate step
             for (int clause = 0; clause < nclauses; ++clause) {
@@ -158,7 +166,9 @@ main(int argc, char *argv[]) {
         // printf("X: %d\n", contradiction);
         // for (int i = 0; i < nvariables; ++i) printf("%d: %d,", i, roundHandled[i]);
         if (contradiction) {
-            // printf("Contra: %d\n", stackPos);
+            // build the implication graph
+
+
             // forget everything learned in round
             for (int i = 1; i <= nvariables; ++i) 
                 if (abs(roundHandled[i]) >= stackPos)
@@ -166,7 +176,7 @@ main(int argc, char *argv[]) {
             // clear to last positive on the stack
             for (; stackPos >= 0 && variableStack[stackPos] < 0; stackPos--) variableStack[stackPos] = 0;
             if (stackPos < 1) {
-                // printf("unsat\n");
+                printf("unsat\n");
                 return 0;
             }
             roundHandled[variableStack[stackPos]] = -stackPos;
