@@ -1,5 +1,6 @@
 *.cnf
 main
 outf
+sudoku
 *.dSYM
 *.zip
