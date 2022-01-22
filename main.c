@@ -27,11 +27,18 @@ takeNumber(char *buffer, int *pos, int length) {
     return sign*magnitude;
 }
 
+int 
+sign(int a) {
+    return a ? 1-2*(a < 0) : 0;
+}
+
+char *filename;
+
 int
 main(int argc, char *argv[]) {
+    filename = argv[1];
     // mmap in the file
-    //char *filename = "/Users/harrison/dextrose/fermat-907547022132073.cnf";
-    char *filename = "ex4.cnf";
+    //char *filename = "ex4.cnf";
     int cnf_file = open(filename, O_RDONLY);
     if (cnf_file < 0) {
         printf("Could not open the CNF file\n");
@@ -93,7 +100,7 @@ main(int argc, char *argv[]) {
             for (; v < nvariables && roundHandled[v]; ++v);
             if (v == nvariables) {
                 printf("sat\n");
-                return 0;
+                break;
             }
             variableStack[stackPos] = v;
             roundHandled[v] = stackPos;
@@ -105,8 +112,8 @@ main(int argc, char *argv[]) {
         do {
             moreToFind = 0;
 
-            for (int i = 0; i < nvariables; ++i) printf("%d,", roundHandled[i]);
-            printf("\n");
+            //for (int i = 0; i < nvariables; ++i) printf("%d,", roundHandled[i]);
+            // printf("\n");
             
             // propigate step
             for (int clause = 0; clause < nclauses; ++clause) {
@@ -148,10 +155,10 @@ main(int argc, char *argv[]) {
             }
         } while (moreToFind);
 
-        printf("X: %d\n", contradiction);
-        for (int i = 0; i < nvariables; ++i) printf("%d: %d,", i, roundHandled[i]);
+        // printf("X: %d\n", contradiction);
+        // for (int i = 0; i < nvariables; ++i) printf("%d: %d,", i, roundHandled[i]);
         if (contradiction) {
-            printf("Contra: %d\n", stackPos);
+            // printf("Contra: %d\n", stackPos);
             // forget everything learned in round
             for (int i = 1; i <= nvariables; ++i) 
                 if (abs(roundHandled[i]) >= stackPos)
@@ -159,7 +166,7 @@ main(int argc, char *argv[]) {
             // clear to last positive on the stack
             for (; stackPos >= 0 && variableStack[stackPos] < 0; stackPos--) variableStack[stackPos] = 0;
             if (stackPos < 1) {
-                printf("unsat\n");
+                // printf("unsat\n");
                 return 0;
             }
             roundHandled[variableStack[stackPos]] = -stackPos;
@@ -168,4 +175,6 @@ main(int argc, char *argv[]) {
             stackPos++;
         }
     }
+
+    for (int i = 1; i < nvariables; ++i) printf("%d 0\n", sign(roundHandled[i])*i);
 }   
