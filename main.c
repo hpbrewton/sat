@@ -4,6 +4,9 @@
 #include <sys/mman.h>
 #include <string.h>
 
+// #define PERCENT_LEFT_ESTIMATE 0
+// #define IMPLICATION_GRAPH_DEBUG 0
+
 /*
 | nclauses * int | nliterals * int | nvariables * int     |  nvariables * int        |
   clause sizes   |  literals       |  variables to handle |  round handled * sign    |
@@ -36,9 +39,9 @@ char *filename;
 
 int
 main(int argc, char *argv[]) {
-    filename = argv[1];
+
     // mmap in the file
-    //char *filename = "ex4.cnf";
+    filename = argv[1];
     int cnf_file = open(filename, O_RDONLY);
     if (cnf_file < 0) {
         printf("Could not open the CNF file\n");
@@ -55,7 +58,7 @@ main(int argc, char *argv[]) {
         return -1;
     }
 
-    // page through the file
+    // page through the file till the problem description (the 'p' row)
     int nvariables = 0;
     int nclauses = 0;
     int i = 0;
@@ -72,7 +75,7 @@ main(int argc, char *argv[]) {
     literalCountOffset[0] = 0;
     int *literalOffset = block+sizeof(int)*(1+nclauses);
 
-    // page through the file (differently)
+    // page through the clauses, adding literals to a literal array, and keeping track of clause counts
     int nclause = 0;
     int nliteral = 0;
     for (; i < length; ++i) {
@@ -86,7 +89,9 @@ main(int argc, char *argv[]) {
     }
 
     int *variableStack = literalOffset+sizeof(int)*(1+nliteral);
-    int *roundHandled = variableStack+sizeof(int)*(1+nvariables);
+    int *roundHandled  = variableStack+sizeof(int)*(1+nvariables);
+    int graphBufferI   = 0;
+    int *graphBuffer   = roundHandled+sizeof(int)*(1+nvariables);
 
     int stackPos = 1;
     memset(variableStack,0,sizeof(int)*(1+nvariables));
@@ -104,10 +109,11 @@ main(int argc, char *argv[]) {
             }
             variableStack[stackPos] = v;
             roundHandled[v] = stackPos;
+            graphBuffer[graphBufferI++] = v;
+            graphBuffer[graphBufferI++] = 0; // we guessed it -- no implicants
         }
 
-        /*
-        */
+#ifdef PERCENT_LEFT_ESTIMATE
         // estimating percent done
         float percent_done = 0;
         for (int i = 1; i <= stackPos; ++i) {
@@ -116,6 +122,7 @@ main(int argc, char *argv[]) {
             if (variableStack[i] < 0) percent_done += delta;
         }
         printf("%.3f%%\n", percent_done*100.0);
+#endif
 
         // propigate
         int contradiction = 0;
@@ -157,28 +164,42 @@ main(int argc, char *argv[]) {
                 }
 
                 if (freeCount == 1) {
+                    graphBuffer[graphBufferI++] = lastLiteral;
+                    graphBuffer[graphBufferI++] = (literalCountOffset[clause+1]-literalCountOffset[clause]-1);
+                    for (int literaln = literalCountOffset[clause]; literaln < literalCountOffset[clause+1]; ++literaln)
+                        if (literalOffset[literaln] != lastLiteral)
+                            graphBuffer[graphBufferI++] = literalOffset[literaln];
                     roundHandled[abs(lastLiteral)] = stackPos*(1-2*(lastLiteral < 0));
                     moreToFind = 1;
                 }
             }
         } while (moreToFind);
 
-        // printf("X: %d\n", contradiction);
-        // for (int i = 0; i < nvariables; ++i) printf("%d: %d,", i, roundHandled[i]);
         if (contradiction) {
-            // build the implication graph
-
+#ifdef IMPLICATION_GRAPH_DEBUG
+            for (int i = 0; i < graphBufferI; ) {
+                int v = graphBuffer[i++];
+                int nimplicants = graphBuffer[i++];
+                printf("%d: ", v);
+                for (int j = 0; j < nimplicants; ++j) printf("%d ", graphBuffer[i++]);
+                printf("\n");
+            }
+            return 0;
+#endif
 
             // forget everything learned in round
             for (int i = 1; i <= nvariables; ++i) 
                 if (abs(roundHandled[i]) >= stackPos)
                     roundHandled[i] = 0;
+
             // clear to last positive on the stack
             for (; stackPos >= 0 && variableStack[stackPos] < 0; stackPos--) variableStack[stackPos] = 0;
             if (stackPos < 1) {
                 printf("unsat\n");
                 return 0;
             }
+
+            // try next possibility
             roundHandled[variableStack[stackPos]] = -stackPos;
             variableStack[stackPos] *= -1;
         } else {
@@ -186,5 +207,5 @@ main(int argc, char *argv[]) {
         }
     }
 
-    for (int i = 1; i < nvariables; ++i) printf("%d 0\n", sign(roundHandled[i])*i);
+    for (int i = 1; i <= nvariables; ++i) printf("%d 0\n", sign(roundHandled[i])*i);
 }   
