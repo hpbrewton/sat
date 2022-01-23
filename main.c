@@ -8,8 +8,9 @@
 // #define IMPLICATION_GRAPH_DEBUG 0
 
 /*
-| nclauses * int | nliterals * int | nvariables * int     |  nvariables * int        |
-  clause sizes   |  literals       |  variables to handle |  round handled * sign    |
+memory structure
+| nclauses * int | nliterals * int | nvariables * int     |  nvariables * int        | ...               |
+| clause sizes   |  literals       |  variables to handle |  round handled * sign    | graph buffer ...  |
 */
 
 int 
