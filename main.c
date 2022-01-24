@@ -37,6 +37,56 @@ sign(int a) {
 }
 
 char *filename;
+int *model;
+int nvariables;
+int nclauses;
+int *literal_counts;
+int *literals;
+
+void
+show_model() {
+    for (int i = 1; i <= nvariables; ++i) printf("%d: %d\n", i, model[i]); printf("\n");
+}
+
+int
+unit_propagation() 
+{
+    int literals_to_propagate = 0;
+    do {
+        literals_to_propagate = 0;
+        for (int clause = 0; clause < nclauses; ++clause) {
+            int free_literal_count = literal_counts[clause+1]-literal_counts[clause];
+            int last_free = -1;
+            int satisfied = 0;
+            for (int literaln = literal_counts[clause]; literaln < literal_counts[clause+1]; ++literaln) {
+                int literal = literals[literaln];
+                int assignment = model[abs(literal)];
+
+                if (((literal <= 0) == (assignment <= 0)) && assignment) {
+                    satisfied = 1;
+                    break; // clause is satisfied
+                }
+                else if (!assignment) { last_free = literal; }// we have a free literal
+                else {--free_literal_count; } // we have a lost literal
+            }
+
+            if (satisfied) continue;
+
+            // can we prop?
+            if (free_literal_count == 1) {
+                model[abs(last_free)] = sign(last_free);
+                literals_to_propagate = 1;
+            }
+
+            // contradiction
+            if (free_literal_count == 0) {
+                return -1; // contradiction
+            }
+        }
+    } while(literals_to_propagate);
+
+    return 0; // ok
+}
 
 int
 main(int argc, char *argv[]) {
@@ -60,153 +110,41 @@ main(int argc, char *argv[]) {
     }
 
     // page through the file till the problem description (the 'p' row)
-    int nvariables = 0;
-    int nclauses = 0;
+    nvariables = 0;
+    nclauses = 0;
     int i = 0;
     for (; i < length; ++i) {
         if (file[i] == 'c') for (; i < length && file[i] != '\n'; ++i); 
         if (file[i] == 'p') {
             nvariables = takeNumber(file, &i, length);
             nclauses = takeNumber(file, &i, length);
+            for (; i < length && file[i] != '\n'; ++i);
             break;
         }
     }
     
-    int *literalCountOffset = block;
-    literalCountOffset[0] = 0;
-    int *literalOffset = block+sizeof(int)*(1+nclauses);
+    literal_counts = block;
+    literal_counts[0] = 0;
+    literals = block+sizeof(int)*(1+nclauses);
+    model = literals+sizeof(int)*(1+nvariables);
 
     // page through the clauses, adding literals to a literal array, and keeping track of clause counts
-    int nclause = 0;
+    nclauses = 0;
     int nliteral = 0;
     for (; i < length; ++i) {
         // get a number
         int number = takeNumber(file, &i, length);
         if (number == 0) {
-            literalCountOffset[++nclause] = nliteral;
+            literal_counts[++nclauses] = nliteral;
         } else {
-            literalOffset[nliteral++] = number;
+            literals[nliteral++] = number;
         }
     }
 
-    int *variableStack = literalOffset+sizeof(int)*(1+nliteral);
-    int *roundHandled  = variableStack+sizeof(int)*(1+nvariables);
-    int graphBufferI   = 0;
-    int *graphBuffer   = roundHandled+sizeof(int)*(1+nvariables);
-
-    int stackPos = 1;
-    memset(variableStack,0,sizeof(int)*(1+nvariables));
-    memset(roundHandled,0,sizeof(int)*(1+nvariables));
-    
-    for (;;) {
-
-        // if neutral, find next free variable
-        if (variableStack[stackPos] == 0) {
-            int v = 1;
-            for (; v < nvariables && roundHandled[v]; ++v);
-            if (v == nvariables) {
-                printf("sat\n");
-                break;
-            }
-            variableStack[stackPos] = v;
-            roundHandled[v] = stackPos;
-            graphBuffer[graphBufferI++] = v;
-            graphBuffer[graphBufferI++] = 0; // we guessed it -- no implicants
-        }
-
-#ifdef PERCENT_LEFT_ESTIMATE
-        // estimating percent done
-        float percent_done = 0;
-        for (int i = 1; i <= stackPos; ++i) {
-            float delta = 1;
-            for (int j = 0; j > ((variableStack[i] < 0) ? variableStack[i] : 0); --j) delta /= 2.0;
-            if (variableStack[i] < 0) percent_done += delta;
-        }
-        printf("%.3f%%\n", percent_done*100.0);
-#endif
-
-        // propigate
-        int contradiction = 0;
-        int moreToFind;
-        do {
-            moreToFind = 0;
-            
-            // propigate step
-            for (int clause = 0; clause < nclauses; ++clause) {
-                int lastLiteral = 0;
-                int freeCount = 0;
-                int satisfied = 0;
-                for (int literaln = literalCountOffset[clause]; literaln < literalCountOffset[clause+1]; ++literaln) {
-                    int literal = literalOffset[literaln];
-                    int assigned = roundHandled[abs(literal)];
-
-                    if (!assigned) {
-                        // this literal is not assigned
-                        lastLiteral = literal;
-                        freeCount++;
-                        continue;
-                    }
-                    
-                    if ((assigned < 0) == (literal < 0)) {
-                        // this clause is satisfied
-                        satisfied = 1;
-                        break;
-                    } 
-                }
-
-                if (satisfied) {
-                    continue;
-                }
-
-                if (freeCount <= 0) {
-                    contradiction = 1;
-                    moreToFind = 0;
-                    break;
-                }
-
-                if (freeCount == 1) {
-                    graphBuffer[graphBufferI++] = lastLiteral;
-                    graphBuffer[graphBufferI++] = (literalCountOffset[clause+1]-literalCountOffset[clause]-1);
-                    for (int literaln = literalCountOffset[clause]; literaln < literalCountOffset[clause+1]; ++literaln)
-                        if (literalOffset[literaln] != lastLiteral)
-                            graphBuffer[graphBufferI++] = literalOffset[literaln];
-                    roundHandled[abs(lastLiteral)] = stackPos*(1-2*(lastLiteral < 0));
-                    moreToFind = 1;
-                }
-            }
-        } while (moreToFind);
-
-        if (contradiction) {
-#ifdef IMPLICATION_GRAPH_DEBUG
-            for (int i = 0; i < graphBufferI; ) {
-                int v = graphBuffer[i++];
-                int nimplicants = graphBuffer[i++];
-                printf("%d: ", v);
-                for (int j = 0; j < nimplicants; ++j) printf("%d ", graphBuffer[i++]);
-                printf("\n");
-            }
-            return 0;
-#endif
-
-            // forget everything learned in round
-            for (int i = 1; i <= nvariables; ++i) 
-                if (abs(roundHandled[i]) >= stackPos)
-                    roundHandled[i] = 0;
-
-            // clear to last positive on the stack
-            for (; stackPos >= 0 && variableStack[stackPos] < 0; stackPos--) variableStack[stackPos] = 0;
-            if (stackPos < 1) {
-                printf("unsat\n");
-                return 0;
-            }
-
-            // try next possibility
-            roundHandled[variableStack[stackPos]] = -stackPos;
-            variableStack[stackPos] *= -1;
-        } else {
-            stackPos++;
-        }
-    }
-
-    for (int i = 1; i <= nvariables; ++i) printf("%d 0\n", sign(roundHandled[i])*i);
+    model = literals+sizeof(int)*(nliteral);
+    memset(model, 0, sizeof(int)*(1+nvariables));
+    model[1]=1;
+    model[10]=1;
+    int contradiction = unit_propagation();
+    show_model();
 }   
