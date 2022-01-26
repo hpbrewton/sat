@@ -42,6 +42,17 @@ int nvariables;
 int nclauses;
 int *literal_counts;
 int *literals;
+int *decisions;
+int ndecisions;
+int current_level = 2;
+
+// data for conflict analysis
+int *impl_map_start;
+int *impl_map;
+int *impl_stack;
+int impl_stack_pos;
+int *impl_resolution;
+int impl_resolution_pos;
 
 void
 show_model() {
@@ -74,18 +85,58 @@ unit_propagation()
 
             // can we prop?
             if (free_literal_count == 1) {
-                model[abs(last_free)] = sign(last_free);
+                int var = abs(last_free);
+                model[var] = sign(last_free)*current_level;
+                impl_map[var] = clause;
                 literals_to_propagate = 1;
             }
 
             // contradiction
             if (free_literal_count == 0) {
-                return -1; // contradiction
+                return clause; // contradiction
             }
         }
     } while(literals_to_propagate);
 
     return 0; // ok
+}
+
+void 
+conflict_clause(int clause)
+{
+    impl_stack_pos = 0;
+    impl_resolution_pos = 0;
+
+    // while stack
+    do {
+
+        // add clause's literals to stack
+        if (clause > 0)
+            for (int literaln = literal_counts[clause]; literaln < literal_counts[clause+1]; ++literaln)
+                impl_stack[impl_stack_pos++] = literals[literaln];
+
+        for (int i = 0; i < impl_stack_pos; ++i) printf("%d, ", impl_stack[i]); printf("|");
+        for (int i = 0; i < impl_resolution_pos; ++i) printf("%d, ", impl_resolution[i]); printf("|");
+        printf(clause > 0 ? "w%d\n" : "%d\n", clause);
+
+        // pop a literal
+        int literal = impl_stack[--impl_stack_pos];
+        clause = impl_map[literal];
+
+        int decision_level = abs(model[abs(literal)]);
+        if (decision_level != current_level) {
+            impl_resolution[impl_resolution_pos++] = literal;
+            clause = -1;
+        } else {
+            impl_map[literal] = -1;
+        }
+
+    }  while(impl_stack_pos);
+
+    // now, the resolution is a clause to add
+    for (int i = 0; i < impl_stack_pos; ++i) printf("%d, ", impl_stack[i]); printf("|");
+    for (int i = 0; i < impl_resolution_pos; ++i) printf("%d, ", impl_resolution[i]); printf("|");
+    printf(clause > 0 ? "w%d\n" : "%d\n", clause);
 }
 
 int
@@ -126,7 +177,6 @@ main(int argc, char *argv[]) {
     literal_counts = block;
     literal_counts[0] = 0;
     literals = block+sizeof(int)*(1+nclauses);
-    model = literals+sizeof(int)*(1+nvariables);
 
     // page through the clauses, adding literals to a literal array, and keeping track of clause counts
     nclauses = 0;
@@ -143,8 +193,14 @@ main(int argc, char *argv[]) {
 
     model = literals+sizeof(int)*(nliteral);
     memset(model, 0, sizeof(int)*(1+nvariables));
+    impl_map        = model+sizeof(int)*(1+nvariables);
+    impl_stack      = impl_map+sizeof(int)*(1+nvariables);
+    impl_resolution = impl_stack+sizeof(int)*(1+nvariables);
+    for (int i = 0; i < 1+nvariables; ++i) impl_map[i] = -1;
     model[1]=1;
+    impl_map[1]=0;
     model[10]=1;
+    impl_map[10]=0;
     int contradiction = unit_propagation();
-    show_model();
+    if (contradiction) conflict_clause(contradiction);
 }   
