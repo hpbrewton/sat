@@ -37,6 +37,7 @@ sign(int a) {
 }
 
 char *filename;
+int model_size;
 int *model;
 int nvariables;
 int nclauses;
@@ -86,7 +87,7 @@ unit_propagation()
             // can we prop?
             if (free_literal_count == 1) {
                 int var = abs(last_free);
-                model[var] = sign(last_free)*current_level;
+                model[var] = sign(last_free)*current_level; ++model_size;
                 impl_map[var] = clause;
                 literals_to_propagate = 1;
             }
@@ -197,10 +198,11 @@ main(int argc, char *argv[]) {
     impl_stack      = impl_map+sizeof(int)*(1+nvariables);
     impl_resolution = impl_stack+sizeof(int)*(1+nvariables);
     for (int i = 0; i < 1+nvariables; ++i) impl_map[i] = -1;
-    model[1]=1;
-    impl_map[1]=0;
-    model[10]=1;
-    impl_map[10]=0;
+    
     int contradiction = unit_propagation();
-    if (contradiction) conflict_clause(contradiction);
+    if (contradiction) {
+        printf("unsat\n");
+        return -1;
+    }
+
 }   
