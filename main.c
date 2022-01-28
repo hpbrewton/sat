@@ -146,7 +146,19 @@ conflict_clause(int clause)
         if (curr_backtrack < backtrack_level) backtrack_level = curr_backtrack;
     }
 
-    printf("backtrack level %d\n", backtrack_level);
+    // now, do some clean up of the systems for a backtrack
+
+    // shrink the model
+    for (int i = 0; i < nvariables+1; ++i) {
+        if (abs(model[i]) >= backtrack_level) {
+            model_size--;
+            model[i] = 0;
+        }
+    }
+
+    // move to the backtrack level 
+    for (int i = backtrack_level; i < ndecisions; ++i) decisions[i] = 0;
+    current_level = backtrack_level;    
 }
 
 int
