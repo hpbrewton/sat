@@ -138,6 +138,15 @@ conflict_clause(int clause)
     for (int i = 0; i < impl_stack_pos; ++i) printf("%d, ", impl_stack[i]); printf("|");
     for (int i = 0; i < impl_resolution_pos; ++i) printf("%d, ", impl_resolution[i]); printf("|");
     printf(clause > 0 ? "w%d\n" : "%d\n", clause);
+
+    // decide level to backtrack to
+    int backtrack_level = nvariables+1;
+    for (int i = 0; i < impl_resolution_pos; ++i) {
+        int curr_backtrack = abs(model[impl_resolution[i]]);
+        if (curr_backtrack < backtrack_level) backtrack_level = curr_backtrack;
+    }
+
+    printf("backtrack level %d\n", backtrack_level);
 }
 
 int
@@ -195,12 +204,17 @@ main(int argc, char *argv[]) {
     model = literals+sizeof(int)*(nliteral);
     memset(model, 0, sizeof(int)*(1+nvariables));
     impl_map        = model+sizeof(int)*(1+nvariables);
+    model[1] = 1;
+    impl_map[1] = 0;
+    model[10] = 1;
+    impl_map[10] = 0;
     impl_stack      = impl_map+sizeof(int)*(1+nvariables);
     impl_resolution = impl_stack+sizeof(int)*(1+nvariables);
     for (int i = 0; i < 1+nvariables; ++i) impl_map[i] = -1;
     
     int contradiction = unit_propagation();
     if (contradiction) {
+        conflict_clause(contradiction);
         printf("unsat\n");
         return -1;
     }
