@@ -4,3 +4,4 @@ outf
 sudoku
 *.dSYM
 *.zip
+.DS_Store
