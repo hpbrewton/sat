@@ -4,8 +4,7 @@
 #include <sys/mman.h>
 #include <string.h>
 
-// #define PERCENT_LEFT_ESTIMATE 0
-// #define IMPLICATION_GRAPH_DEBUG 0
+// #define RESOLUTION_DEF 1
 
 /*
 memory structure
@@ -45,7 +44,7 @@ int *literal_counts;
 int *literals;
 int *decisions;
 int ndecisions;
-int current_level = 2;
+int current_level = 1;
 
 // data for conflict analysis
 int *impl_map_start;
@@ -116,16 +115,18 @@ conflict_clause(int clause)
             for (int literaln = literal_counts[clause]; literaln < literal_counts[clause+1]; ++literaln)
                 impl_stack[impl_stack_pos++] = literals[literaln];
 
+    #ifndef RESOLUTION_DEF
         for (int i = 0; i < impl_stack_pos; ++i) printf("%d, ", impl_stack[i]); printf("|");
         for (int i = 0; i < impl_resolution_pos; ++i) printf("%d, ", impl_resolution[i]); printf("|");
         printf(clause > 0 ? "w%d\n" : "%d\n", clause);
+    #endif
 
         // pop a literal
         int literal = impl_stack[--impl_stack_pos];
         clause = impl_map[literal];
 
         int decision_level = abs(model[abs(literal)]);
-        if (decision_level != current_level) {
+        if (decision_level != current_level || !clause) {
             impl_resolution[impl_resolution_pos++] = literal;
             clause = -1;
         } else {
@@ -134,10 +135,12 @@ conflict_clause(int clause)
 
     }  while(impl_stack_pos);
 
+    #ifndef RESOLUTION_DEF
     // now, the resolution is a clause to add
     for (int i = 0; i < impl_stack_pos; ++i) printf("%d, ", impl_stack[i]); printf("|");
     for (int i = 0; i < impl_resolution_pos; ++i) printf("%d, ", impl_resolution[i]); printf("|");
     printf(clause > 0 ? "w%d\n" : "%d\n", clause);
+    #endif // RESOLUTION_DEF
 
     // decide level to backtrack to
     int backtrack_level = nvariables+1;
@@ -145,6 +148,9 @@ conflict_clause(int clause)
         int curr_backtrack = abs(model[impl_resolution[i]]);
         if (curr_backtrack < backtrack_level) backtrack_level = curr_backtrack;
     }
+
+    printf("%d <<\n", backtrack_level);
+    if (backtrack_level == nvariables+1) return;
 
     // now, do some clean up of the systems for a backtrack
 
@@ -163,7 +169,6 @@ conflict_clause(int clause)
 
 int
 main(int argc, char *argv[]) {
-
     // mmap in the file
     filename = argv[1];
     int cnf_file = open(filename, O_RDONLY);
@@ -226,19 +231,22 @@ main(int argc, char *argv[]) {
         printf("unsat\n");
         return -1;
     } else {
-        while (model_size < nvariables && current_level > 0) {
-            printf("%d\n", model_size);
+        while (model_size <= nvariables) {
             int chosen_variable = -1;
-            for (int i = model_size+1; i < nvariables+1; ++i) {
+            for (int i = 1; i <= nvariables; ++i) {
                 if (!model[i]) {
                     chosen_variable = i;
                     break;
                 }
             }
-            decisions[current_level++] = chosen_variable;
+            decisions[current_level] = chosen_variable;
+            model[chosen_variable] = current_level;
+            
             model_size++;
             int contradiction = unit_propagation();
+            for (int i =  1; i <= nvariables; ++i) printf("%d: %d\n", i, model[i]);
             if (contradiction) conflict_clause(contradiction);
+            else ++current_level;
         }
         if (model_size == nvariables && current_level > 0) printf("sat\n");
         else printf("unsat\n");
